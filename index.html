@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Power Battle — Full Single-file</title>
+  <meta name="description" content="Power Battle — single-file demo with formation, adaptive AI, advanced combat math, timeline, VFX, simulator and save/export" />
+  <style>
+    :root{--bg:#071024;--card:#0b1220;--muted:#9ca3af;--accent:#f59e0b;--green:#10b981;--danger:#fb7185}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:linear-gradient(180deg,#061226 0%, #071428 80%);color:#e6eef8;padding:12px}
+    .wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:14px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    h2{margin:6px 0 12px;font-size:18px}
+    .resources{display:flex;gap:8px;flex-wrap:wrap}
+    .res{background:rgba(255,255,255,0.02);padding:8px 10px;border-radius:8px;color:var(--muted);min-width:92px;text-align:center}
+    .small{font-size:12px;color:var(--muted)}
+    .btn{background:var(--accent);color:#071428;padding:6px 10px;border-radius:8px;border:none;cursor:pointer}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .input,select{padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .units-list{display:flex;flex-direction:column;gap:8px}
+    .unit-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)}
+    .unit-stats{font-size:12px;color:var(--muted)}
+    .flex{display:flex;gap:8px;align-items:center}
+    #battleLog{height:220px;overflow:auto;padding:8px;background:#061224;border-radius:8px;color:var(--muted);font-size:13px}
+    .timeline{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{padding:6px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:12px}
+    .bars{height:8px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden}
+    .bar-inner{height:100%;background:linear-gradient(90deg,var(--green),var(--accent));transition:width .4s}
+    .center{display:flex;align-items:center;justify-content:center}
+    .arena{min-height:420px;padding:12px;display:grid;grid-template-rows:auto 1fr;gap:8px}
+    .armies{display:flex;gap:12px}
+    .army-card{flex:1;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));}
+    .big{font-size:16px}
+    .danger{color:var(--danger)}
+    .success{color:var(--green)}
+    .muted{color:var(--muted)}
+    .formation{display:grid;grid-template-rows:repeat(2,auto);gap:8px;padding:8px;background:rgba(255,255,255,0.01);border-radius:8px}
+    .formation-row{display:flex;gap:8px;align-items:center}
+    .slot{width:64px;height:64px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;cursor:grab;border:1px dashed rgba(255,255,255,0.03)}
+    .slot.has{background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.03));cursor:move}
+    .unit-portrait{font-size:12px;text-align:center}
+    .hit-number{position:absolute;font-weight:700;pointer-events:none;transform:translateY(0);animation:pop 700ms ease-out forwards}
+    @keyframes pop{0%{opacity:1;transform:translateY(0) scale(1)}50%{transform:translateY(-18px) scale(1.15)}100%{opacity:0;transform:translateY(-38px) scale(.9)}}
+    .vfx-crit{color:var(--danger);}
+    .sim-results{display:flex;gap:8px;align-items:center}
+    footer{margin-top:12px;color:var(--muted);font-size:13px;text-align:center}
+    @media(max-width:980px){.wrap{grid-template-columns:1fr}.arena{min-height:320px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- LEFT PANEL: CONTROL & SHOP -->
+    <div class="card">
+      <h2>Resurslar va Boshqaruv</h2>
+      <div class="resources" id="resources"></div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <select id="zoneSelect" class="input"></select>
+        <button id="enterZone" class="btn">Enter Zone</button>
+      </div>
+
+      <hr style="opacity:.06;margin:12px 0" />
+
+      <h2>Unit Shop</h2>
+      <div class="units-list" id="shop"></div>
+
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button id="openArmy" class="btn">Army Editor</button>
+        <button id="exportBtn" class="input">Export</button>
+      </div>
+
+      <hr style="opacity:.06;margin:12px 0" />
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <div class="small">Auto-save: <span id="autosaveStatus">ON</span></div>
+        <button id="resetBtn" class="input">Reset</button>
+      </div>
+
+      <hr style="opacity:.06;margin:12px 0" />
+      <h2>Simulator (balans)</h2>
+      <div class="small muted">Run many simulated fights to measure winrate.</div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <input id="simCount" class="input" type="number" value="200" style="width:100px" />
+        <button id="runSim" class="btn secondary">Run</button>
+      </div>
+      <div id="simOutput" style="margin-top:8px" class="small muted"></div>
+
+    </div>
+
+    <!-- RIGHT PANEL: BATTLE ARENA -->
+    <div class="card arena">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <h2>Battle Arena <span class="small muted">(Skirmish / Siege — Advanced)</span></h2>
+          <div class="small">Account XP: <span id="xpVal">0</span> • Level: <span id="lvlVal">1</span></div>
+        </div>
+        <div class="flex">
+          <select id="battleType" class="input">
+            <option value="skirmish">Skirmish</option>
+            <option value="siege">Siege</option>
+          </select>
+          <button id="startBattle" class="btn">Start Battle</button>
+        </div>
+      </div>
+
+      <div class="armies">
+        <div class="army-card">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div><strong>Tugilgan Armiyam</strong><div class="small muted">Player Army</div></div>
+            <div class="small muted">Units: <span id="playerUnitCount">0</span></div>
+          </div>
+          <div style="display:flex;gap:12px;margin-top:8px">
+            <div style="flex:1">
+              <div class="small muted">Formation</div>
+              <div class="formation" id="formation">
+                <div class="formation-row" id="rowBack"></div>
+                <div class="formation-row" id="rowFront"></div>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div class="small muted">Army Stacks</div>
+              <div id="playerArmyUI" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="army-card">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div><strong>Dushman Armiyasi</strong><div class="small muted">AI Tribe</div></div>
+            <div class="small muted">Strategy: <span id="aiStrategy">balanced</span></div>
+          </div>
+          <div style="margin-top:8px">
+            <div class="small muted">Enemy Preview</div>
+            <div id="enemyArmyUI" style="margin-top:8px"></div>
+            <div style="margin-top:6px" class="small muted">Timeline (per-round)</div>
+            <div id="timeline" style="margin-top:6px" class="timeline"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <div class="chip">Round: <strong id="roundNum">0</strong></div>
+        <div class="chip">Duration: <strong id="battleDuration">0ms</strong></div>
+        <div class="chip">Winner: <strong id="battleWinner">-</strong></div>
+        <div style="flex:1"></div>
+        <div class="small muted">Log</div>
+      </div>
+
+      <div id="battleLog"></div>
+      <footer>Power Battle — full demo. So‘rovlaring bo‘lsa, keyingi feature qo‘shaman.</footer>
+    </div>
+  </div>
+
+  <script>
+  /************************************************************************
+   * Full single-file: formation drag-drop, advanced combat (types, pen, accuracy),
+   * adaptive AI, timeline, VFX, simulator, save/export.
+   ************************************************************************/
+
+  // ---------- UTILS ----------
+  const rand = (min, max) => Math.random() * (max - min) + min;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const now = () => performance.now();
+  const uid = (p='') => `${Math.random().toString(36).slice(2,9)}${p}`;
+
+  // ---------- DATA MODELS ----------
+  class UnitTemplate { constructor(id,name,role,base){ this.id=id;this.name=name;this.role=role;this.base=base; } }
+  class UnitStack {
+    constructor(template, level=1, count=1){
+      this.id = uid('s');
+      this.template = template; this.level = level; this.count = count;
+      this.computeStats();
+    }
+    computeStats(){
+      const b=this.template.base; const l=this.level;
+      this.hp_per_unit = Math.round(b.hp * (1 + (l-1)*0.12));
+      this.attack = Math.round(b.attack * (1 + (l-1)*0.10));
+      this.armor = Math.round(b.armor * (1 + (l-1)*0.08));
+      this.crit = clamp(b.crit + (l-1)*0.01, 0, 0.6);
+      this.critMultiplier = b.critMult || 0.5;
+      this.accuracy = clamp(b.accuracy || 0.9 - (l-1)*0.01, 0.5, 0.98);
+      this.pen = b.pen || 0; // armor penetration
+      this.morale = clamp(0.5 + (l-1)*0.03, 0.3, 1.2);
+      this.type = b.type || 'physical';
+    }
+    clone(){ const s = new UnitStack(this.template,this.level,this.count); s.id=this.id; return s; }
+  }
+  class Army { constructor(owner='player'){ this.owner=owner; this.stacks=[]; this.formationSlots={front:[],back:[]}; this.strategy='balanced'; }
+    totalUnits(){ return this.stacks.reduce((s,u)=>s+u.count,0); }
+    clone(){ const a = new Army(this.owner); a.strategy=this.strategy; a.stacks=this.stacks.map(s=>s.clone()); a.formationSlots=JSON.parse(JSON.stringify(this.formationSlots)); return a; }
+  }
+
+  // ---------- TEMPLATES ----------
+  const TEMPLATES = [
+    new UnitTemplate('u_archer','Archer','ranged',{attack:48,hp:80,armor:6,crit:0.08,critMult:0.6,accuracy:0.92,type:'piercing'}),
+    new UnitTemplate('u_swords','Swordsman','melee',{attack:72,hp:120,armor:18,crit:0.05,critMult:0.4,accuracy:0.88,type:'physical'}),
+    new UnitTemplate('u_tank','Shieldbearer','tank',{attack:40,hp:240,armor:36,crit:0.03,critMult:0.3,accuracy:0.85,type:'physical',pen:6}),
+    new UnitTemplate('u_mage','Mage','ranged',{attack:96,hp:70,armor:4,crit:0.06,critMult:0.8,accuracy:0.86,type:'magic'}),
+    new UnitTemplate('u_hound','Warg','melee',{attack:60,hp:95,armor:8,crit:0.07,critMult:0.45,accuracy:0.9,type:'physical'})
+  ];
+
+  // ---------- GAME STATE ----------
+  const State = {
+    resources: {gold:1200,gems:12,food:200,energy:10},
+    xp:0,level:1, autosave:true, armies:{player:new Army('player')}, zones:[], leaderboard:[]
+  };
+
+  const ZONES = [ {id:'zone1',name:'Kichik Zona',difficulty:0.85,reward:{gold:50,food:20},desc:'Tez jang, kichik mukofot'},
+                  {id:'zone2',name:'Katta Zona',difficulty:1.25,reward:{gold:200,food:80},desc:'Qiyin jang, katta mukofot'} ];
+
+  // ---------- AI GENERATOR (adaptive) ----------
+  function generateAIArmy(difficulty=1.0){
+    const army = new Army('ai');
+    const stacks = Math.floor(rand(3,5));
+    for(let i=0;i<stacks;i++){
+      const tpl = TEMPLATES[Math.floor(rand(0,TEMPLATES.length))];
+      const lvl = Math.max(1, Math.round(rand(1, Math.min(6, 1 + difficulty*3))));
+      const cnt = Math.max(1, Math.round(rand(3, 14) * (0.8 + difficulty*0.5)));
+      army.stacks.push(new UnitStack(tpl,lvl,cnt));
+    }
+    // simple strat: if many tanks -> defensive, if many ranged -> balanced, else aggressive adjusted by difficulty
+    const counts = {tank:0,ranged:0,melee:0}; army.stacks.forEach(s=>counts[s.template.role] = (counts[s.template.role]||0)+s.count);
+    if(counts.tank > (counts.melee+counts.ranged)/2) army.strategy='defensive';
+    else if(counts.ranged > (counts.melee+counts.tank)/1.5) army.strategy='balanced';
+    else army.strategy = difficulty>1.1 ? 'aggressive' : 'balanced';
+    return army;
+  }
+
+  function adaptAIStrategy(aiArmy, playerArmy){
+    // during battle adapt strategy based on HP and composition
+    const playerUnits = playerArmy.totalUnits(); const aiUnits = aiArmy.totalUnits();
+    if(aiUnits===0) return aiArmy.strategy;
+    if(aiUnits < playerUnits * 0.5) aiArmy.strategy='turtle';
+    if(playerArmy.stacks.some(s=>s.template.role==='ranged') && aiArmy.stacks.some(s=>s.template.role==='melee')) aiArmy.strategy='rush';
+    return aiArmy.strategy;
+  }
+
+  // ---------- COMBAT MATH ----------
+  function mitigationFactor(armor){ return 100/(100+armor); }
+  function typeModifier(attType, defType){ // simple rock-paper for types (magic > armor? keep simple)
+    if(attType==='magic' && defType==='physical') return 1.05;
+    if(attType==='piercing' && defType==='tank') return 1.12;
+    return 1.0;
+  }
+  function accuracyAfterMorale(acc, morale){ return clamp(acc * (0.85 + 0.3*morale), 0.2, 0.99); }
+
+  function resolveRoundDetailed(attArmy, defArmy){
+    const events = [];
+    // order: compute initiative weight (front line attacks more)
+    for(const a of attArmy.stacks){
+      if(a.count<=0) continue;
+      let targets = defArmy.stacks.filter(s=>s.count>0);
+      if(!targets.length) break;
+      // target selection influenced by AI strategy / unit role
+      let target = selectTarget(a, targets, defArmy);
+
+      // compute per-unit chance to hit
+      const acc = accuracyAfterMorale(a.accuracy, a.morale);
+      const hitChance = acc; // simplified
+
+      // critical chance per hit
+      const critChance = a.crit;
+
+      // average hits expected: count * hitChance
+      const expectedHits = a.count * hitChance;
+
+      // raw damage per hit
+      const base = a.attack;
+      // crit multiplier effect on average
+      const avgCritMultiplier = 1 + critChance * a.critMultiplier;
+      const raw = base * avgCritMultiplier;
+
+      // type modifier
+      const tmod = typeModifier(a.type || 'physical', target.type || 'physical');
+
+      // armor penetration effect
+      const effArmor = Math.max(0, target.armor - a.pen);
+      const mit = mitigationFactor(effArmor);
+      const perHitDamage = raw * mit * tmod;
+
+      // total expected damage
+      const totalDamage = perHitDamage * expectedHits;
+
+      // casualties
+      const casualties = Math.floor(totalDamage / target.hp_per_unit);
+      const casualtiesClamped = Math.min(casualties, target.count);
+
+      // also reduce morale of target based on casualties ratio
+      const moraleLoss = (casualtiesClamped / Math.max(1, target.count)) * 0.12;
+      target.morale = clamp((target.morale || 1) - moraleLoss, 0.2, 1.2);
+
+      target.count -= casualtiesClamped;
+      events.push({from:a.template.name, to:target.template.name, casualties:casualtiesClamped, approxDamage:Math.round(totalDamage), side:attArmy.owner, critChance:Math.round(critChance*100), hitChance:Math.round(hitChance*100)});
+    }
+    defArmy.stacks = defArmy.stacks.filter(s=>s.count>0);
+    return events;
+  }
+
+  function selectTarget(attacker, targets, defArmy){
+    // prioritise tanks if attacker is melee and enemy has tanks and strategy is aggressive
+    const tanks = targets.filter(t=>t.template.role==='tank');
+    if(attacker.template.role==='melee' && tanks.length) return tanks[Math.floor(rand(0,tanks.length))];
+    if(defArmy.strategy==='aggressive') return targets[Math.floor(rand(0,targets.length))];
+    // choose lowest hp-per-unit to try to one-shot
+    let byHp = targets.slice().sort((a,b)=>a.hp_per_unit - b.hp_per_unit);
+    return byHp[0];
+  }
+
+  // ---------- BATTLE ENGINE ----------
+  class BattleEngine {
+    constructor(playerArmy, enemyArmy, options={maxRounds:6}){
+      // clone deep structures so we don't mutate State directly
+      this.player = playerArmy.clone(); this.enemy = enemyArmy.clone();
+      this.round=0; this.maxRounds=options.maxRounds||6; this.logs=[]; this.startTime=now();
+    }
+    step(){
+      if(this.round>=this.maxRounds) return false;
+      this.round++;
+      // adapt AI strategy mid-battle
+      adaptAIStrategy(this.enemy, this.player);
+      // player attacks first
+      const pEvents = resolveRoundDetailed(this.player, this.enemy);
+      pEvents.forEach(e=>this.logs.push({round:this.round, ...e}));
+      if(this.enemy.stacks.length===0) return true;
+      // enemy attacks
+      const eEvents = resolveRoundDetailed(this.enemy, this.player);
+      eEvents.forEach(e=>this.logs.push({round:this.round, ...e}));
+      if(this.player.stacks.length===0) return true;
+      return (this.round < this.maxRounds);
+    }
+    run(){
+      while(this.round < this.maxRounds && this.player.stacks.length>0 && this.enemy.stacks.length>0){ this.step(); }
+      const duration = Math.round(now() - this.startTime);
+      let winner='draw';
+      if(this.enemy.stacks.length===0 && this.player.stacks.length>0) winner='player';
+      if(this.player.stacks.length===0 && this.enemy.stacks.length>0) winner='enemy';
+      return {winner, logs:this.logs, rounds:this.round, duration, player:this.player, enemy:this.enemy};
+    }
+  }
+
+  // ---------- UI HOOKS ----------
+  const shopEl = document.getElementById('shop');
+  const resourcesEl = document.getElementById('resources');
+  const playerArmyUI = document.getElementById('playerArmyUI');
+  const enemyArmyUI = document.getElementById('enemyArmyUI');
+  const battleLog = document.getElementById('battleLog');
+  const zoneSelect = document.getElementById('zoneSelect');
+  const timelineEl = document.getElementById('timeline');
+
+  function renderResources(){
+    resourcesEl.innerHTML='';
+    for(const k of Object.keys(State.resources)){
+      const d=document.createElement('div');d.className='res';d.innerHTML=`<div style="font-weight:600">${State.resources[k]}</div><div class="small muted">${k}</div>`;resourcesEl.appendChild(d);
+    }
+    document.getElementById('xpVal').innerText=State.xp; document.getElementById('lvlVal').innerText=State.level;
+  }
+
+  function renderShop(){ shopEl.innerHTML=''; TEMPLATES.forEach(t=>{
+    const row=document.createElement('div');row.className='unit-row';
+    row.innerHTML=`<div style="flex:1"><strong>${t.name}</strong><div class="unit-stats">Role: ${t.role} • ATK ${t.base.attack} • HP ${t.base.hp}</div></div>`;
+    const buy=document.createElement('button');buy.className='btn';buy.innerText='Buy x5';buy.onclick=()=>buyUnit(t.id,5);
+    row.appendChild(buy); shopEl.appendChild(row);
+  }); }
+
+  function buyUnit(id,count=1){ const tpl=TEMPLATES.find(t=>t.id===id); const price=Math.round((tpl.base.attack+tpl.base.hp)/2)*count; if(State.resources.gold<price){ alert('Gold kam!'); return } State.resources.gold-=price; State.armies.player.stacks.push(new UnitStack(tpl,1,count)); log(`Bought ${count} ${tpl.name} for ${price} gold`); renderAll(); saveState(); }
+
+  function renderArmyUI(army, container){ container.innerHTML=''; if(!army||!army.stacks.length){ container.innerHTML='<div class="small muted">No units</div>'; return }
+    army.stacks.forEach((s,idx)=>{ const el=document.createElement('div'); el.className='unit-row'; el.innerHTML=`<div style="flex:1"><strong>${s.template.name} Lv${s.level} x${s.count}</strong><div class="unit-stats">ATK ${s.attack} • HP ${s.hp_per_unit} • ARM ${s.armor} • CR ${Math.round(s.crit*100)}%</div></div>`;
+      const up=document.createElement('button'); up.className='input'; up.innerText='Upgrade'; up.onclick=()=>{ upgradeStack(army, idx); };
+      const assign=document.createElement('button'); assign.className='input'; assign.innerText='Assign'; assign.onclick=()=>{ assignToFormation(s.id); };
+      el.appendChild(assign); el.appendChild(up); container.appendChild(el); }); document.getElementById('playerUnitCount').innerText = army.totalUnits(); }
+
+  function upgradeStack(army, idx){ const s=army.stacks[idx]; const cost = Math.round((s.attack + s.hp_per_unit) * 1.2); if(State.resources.gold < cost){ alert('Gold yetarli emas'); return } State.resources.gold -= cost; s.level++; s.computeStats(); log(`Upgraded ${s.template.name} to Lv${s.level} (-${cost} gold)`); renderAll(); saveState(); }
+
+  // ---------- FORMATION (drag & drop) ----------
+  const rowBack = document.getElementById('rowBack'); const rowFront = document.getElementById('rowFront');
+  function initFormationSlots(){ rowBack.innerHTML=''; rowFront.innerHTML=''; for(let i=0;i<4;i++){ rowBack.appendChild(createSlot('back',i)); }
+    for(let i=0;i<3;i++){ rowFront.appendChild(createSlot('front',i)); }
+  }
+  function createSlot(part,idx){ const slot=document.createElement('div'); slot.className='slot'; slot.dataset.part=part; slot.dataset.idx=idx; slot.addEventListener('dragover',e=>e.preventDefault()); slot.addEventListener('drop',onDropSlot); return slot; }
+
+  function assignToFormation(stackId){ // find a free slot
+    const free = document.querySelectorAll('.slot:not(.has)'); if(!free.length){ alert('Barcha slotlar to'liq'); return }
+    const stack = State.armies.player.stacks.find(s=>s.id===stackId); if(!stack) return; const slot = free[0]; slot.classList.add('has'); slot.dataset.stackId = stackId; slot.innerHTML = `<div class="unit-portrait">${stack.template.name}<div class="small">x${stack.count}</div></div>`; }
+
+  function onDropSlot(e){ e.preventDefault(); const data = e.dataTransfer.getData('text/plain'); try{ const obj = JSON.parse(data); if(obj.stackId){ assignToSlot(e.currentTarget, obj.stackId); } }catch(err){} }
+
+  function assignToSlot(slot, stackId){ slot.classList.add('has'); slot.dataset.stackId = stackId; const stack = State.armies.player.stacks.find(s=>s.id===stackId); slot.innerHTML = `<div class="unit-portrait">${stack.template.name}<div class="small">x${stack.count}</div></div>`; }
+
+  function serializeFormation(){ const slots = document.querySelectorAll('.slot'); const out={front:[],back:[]}; slots.forEach(s=>{ const p=s.dataset.part; const sid=s.dataset.stackId||null; out[p].push(sid); }); State.armies.player.formationSlots = out; }
+
+  // Allow dragging from army UI
+  function enableDragFromArmy(){ // add draggable attributes to unit rows
+    playerArmyUI.querySelectorAll('.unit-row').forEach((row,idx)=>{
+      row.draggable = true; row.addEventListener('dragstart', e=>{
+        const stack = State.armies.player.stacks[idx]; e.dataTransfer.setData('text/plain', JSON.stringify({stackId:stack.id}));
+      });
+    });
+  }
+
+  // ---------- BATTLE UI / RUN ----------
+  document.getElementById('startBattle').addEventListener('click', ()=>{
+    serializeFormation(); const playerArmy = State.armies.player; if(playerArmy.stacks.length===0){ alert('Armiyangizda birlik yo\'q!'); return }
+    const zone = ZONES[zoneSelect.value]; const enemy = generateAIArmy(zone.difficulty);
+    document.getElementById('aiStrategy').innerText = enemy.strategy; renderArmyUIPreview(enemy); runBattle(playerArmy, enemy);
+  });
+
+  function renderArmyUIPreview(army){ enemyArmyUI.innerHTML=''; army.stacks.forEach(s=>{ const el=document.createElement('div'); el.className='unit-row'; el.innerHTML=`<div style="flex:1"><strong>${s.template.name} Lv${s.level} x${s.count}</strong><div class="unit-stats">ATK ${s.attack} • HP ${s.hp_per_unit} • ARM ${s.armor}</div></div>`; enemyArmyUI.appendChild(el); }); }
+
+  function runBattle(playerArmy, enemyArmy){ battleLog.innerHTML=''; timelineEl.innerHTML=''; document.getElementById('roundNum').innerText='0'; document.getElementById('battleWinner').innerText='-';
+    const engine = new BattleEngine(playerArmy, enemyArmy, {maxRounds:6}); const res = engine.run();
+    res.logs.forEach(l=>{ appendLog(`[R${l.round}] ${l.side.toUpperCase()} ${l.from} → ${l.to} : ${l.casualties} casualties (∼${l.approxDamage} dmg) hit%:${l.hitChance}% crit%:${l.critChance}%`); addTimelineEntry(l); });
+    document.getElementById('roundNum').innerText = res.rounds; document.getElementById('battleDuration').innerText = res.duration + 'ms'; document.getElementById('battleWinner').innerText = res.winner;
+    // rewards
+    if(res.winner==='player'){ const zone = ZONES[zoneSelect.value]; State.resources.gold += zone.reward.gold; State.resources.food += zone.reward.food; State.xp += Math.round(50 * zone.difficulty); log(`Victory! +${zone.reward.gold}g +${zone.reward.food}f. +XP`); }
+    else if(res.winner==='enemy'){ State.xp += Math.round(20 * (res.rounds/6)); log('Defeat. XP gained'); }
+    else { State.xp += 15; log('Draw.'); }
+    while(State.xp >= xpToNext(State.level)){ State.xp -= xpToNext(State.level); State.level++; log('Leveled up!'); }
+    renderAll(); saveState(); // show hit VFX on screen for important events
+    showBattleVFX(res.logs);
+  }
+
+  // ---------- TIMELINE & VFX ----------
+  function addTimelineEntry(evt){ const el=document.createElement('div'); el.className='chip'; el.innerText = `R${evt.round}: ${evt.from}->${evt.to} -${evt.casualties}`; timelineEl.appendChild(el); }
+
+  function showBattleVFX(logs){ // briefly show top casualty events as floating numbers in center
+    const arena = document.querySelector('.arena'); logs.slice(0,6).forEach((l,i)=>{
+      if(l.casualties<=0) return; const el=document.createElement('div'); el.className='hit-number'; el.style.left = (20 + i*8)+'%'; el.style.top = (40 + i*3)+'%'; el.innerText = `-${l.casualties}`; if(l.approxDamage>200) el.classList.add('vfx-crit'); arena.appendChild(el); setTimeout(()=>el.remove(),900);
+    }); }
+
+  // ---------- LOG & XP ----------
+  function appendLog(txt){ const el=document.createElement('div'); el.innerText = txt; battleLog.appendChild(el); battleLog.scrollTop = battleLog.scrollHeight; }
+  function log(txt){ appendLog(`[${new Date().toLocaleTimeString()}] ${txt}`); }
+  function xpToNext(lvl){ return Math.round(100 * Math.pow(1.5, lvl-1)); }
+
+  // ---------- SAVE / EXPORT / IMPORT ----------
+  function saveState(){ if(!State.autosave) return; try{ localStorage.setItem('pb_state_v2', JSON.stringify(State)); document.getElementById('autosaveStatus').innerText='ON'; }catch(e){ console.warn('save failed',e); document.getElementById('autosaveStatus').innerText='ERR' } }
+  function loadState(){ try{ const s = localStorage.getItem('pb_state_v2'); if(s){ const parsed = JSON.parse(s); Object.assign(State, parsed); } }catch(e){ console.warn('load failed',e) } }
+  document.getElementById('exportBtn').addEventListener('click', ()=>{ const blob = new Blob([JSON.stringify(State,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='pb_state_export.json'; a.click(); URL.revokeObjectURL(url); });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{ if(confirm('Hammasini reset qilinsinmi?')){ localStorage.removeItem('pb_state_v2'); location.reload(); } });
+
+  // ---------- SIMULATOR ----------
+  document.getElementById('runSim').addEventListener('click', ()=>{
+    const n = Math.max(1, parseInt(document.getElementById('simCount').value || 100)); runSimulator(n);
+  });
+
+  function runSimulator(n){ const pArmy = State.armies.player; if(pArmy.stacks.length===0){ alert('Armiyangizda birlik yo\'q'); return }
+    const zone = ZONES[zoneSelect.value]; const stats={wins:0,losses:0,draws:0}; const start=now();
+    for(let i=0;i<n;i++){ const enemy = generateAIArmy(zone.difficulty); const res = new BattleEngine(pArmy, enemy, {maxRounds:6}).run(); if(res.winner==='player') stats.wins++; else if(res.winner==='enemy') stats.losses++; else stats.draws++; }
+    const dur = Math.round(now()-start); document.getElementById('simOutput').innerText = `Wins: ${stats.wins} | Losses: ${stats.losses} | Draws: ${stats.draws} • ${n} sims in ${dur}ms`;
+  }
+
+  // ---------- INIT ----------
+  function initZones(){ zoneSelect.innerHTML=''; ZONES.forEach((z,idx)=>{ const o=document.createElement('option'); o.value=idx; o.innerText = `${z.name} • ${z.desc}`; zoneSelect.appendChild(o); }); }
+  document.getElementById('openArmy').addEventListener('click', ()=>{ alert('Army editor: use Shop to buy, Upgrade to level, Assign to formation by clicking Assign or drag from unit list.'); });
+
+  function renderAll(){ renderResources(); renderShop(); renderArmyUI(State.armies.player, playerArmyUI); initFormationSlots(); restoreFormationUI(); setTimeout(()=>enableDragFromArmy(),120); }
+
+  function restoreFormationUI(){ // read State.armies.player.formationSlots and fill slots
+    initFormationSlots(); const f = State.armies.player.formationSlots || {front:[],back:[]}; const slots = document.querySelectorAll('.slot'); slots.forEach(s=>{
+      const part=s.dataset.part; const idx=Number(s.dataset.idx); const sid = (f[part] && f[part][idx]) || null; if(sid){ const stack = State.armies.player.stacks.find(st=>st.id===sid); if(stack){ s.classList.add('has'); s.dataset.stackId = sid; s.innerHTML = `<div class="unit-portrait">${stack.template.name}<div class="small">x${stack.count}</div></div>`; } }
+    }); }
+
+  // small seed
+  loadState(); initZones(); if(State.armies.player.stacks.length===0){ State.armies.player.stacks.push(new UnitStack(TEMPLATES[0],2,8)); State.armies.player.stacks.push(new UnitStack(TEMPLATES[2],1,4)); }
+  renderAll(); saveState(); setInterval(()=>saveState(),30000);
+
+  // expose some functions for debug in console
+  window._PB = {State, TEMPLATES, BattleEngine, generateAIArmy};
+  </script>
+</body>
+</html>
